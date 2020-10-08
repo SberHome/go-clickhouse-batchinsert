@@ -1,5 +1,5 @@
 # go-clickhouse-batchinsert
-go client (batch insert) base on https://github.com/kshvakov/clickhouse/
+go client (batch insert) base on database/sql module
 ### Clickhouse client for batch insert
 Ref to https://clickhouse.yandex/docs/en/introduction/performance/
 
@@ -28,9 +28,27 @@ So we only need to cache objs, and flush them at a fixed time or a fixed amount.
 #### Example
 ```go
         
-import batchinsert "github.com/MaruHyl/go-clickhouse-batchinsert"
+import (
+	"database/sql"
+	batchinsert "github.com/sberhome/go-clickhouse-batchinsert"
+	
+	_ "github.com/ClickHouse/clickhouse-go"
+)
 
-func ExampleBatchInsert() {
+func ExampleBatchInsert(url string) {
+	// connect to DB
+	db, err := sql.Open("clickhouse", url)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	err = db.Ping()
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+
 	//
 	createTable := `
 			CREATE TABLE IF NOT EXISTS test (
@@ -39,6 +57,7 @@ func ExampleBatchInsert() {
 	insertSql := "INSERT INTO test (x) values (?)"
 	//
 	b, err := batchinsert.New(
+		db,
 		insertSql,
 		batchinsert.WithHost("127.0.0.1:9000"),
 	)
@@ -46,7 +65,7 @@ func ExampleBatchInsert() {
 		panic(err)
 	}
 	//
-	_, err = b.DB().Exec(createTable)
+	_, err = db.Exec(createTable)
 	if err != nil {
 		panic(err)
 	}
@@ -55,7 +74,7 @@ func ExampleBatchInsert() {
 	b.Insert(2)
 	b.Insert(3)
 	//
-	_, err = b.DB().Exec(`DROP TABLE IF EXISTS test`)
+	_, err = db.Exec(`DROP TABLE IF EXISTS test`)
 	if err != nil {
 		panic(err)
 	}
