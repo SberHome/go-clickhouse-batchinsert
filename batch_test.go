@@ -2,25 +2,51 @@ package batchinsert_test
 
 import (
 	"database/sql"
+	"net/url"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	batchinsert "github.com/MaruHyl/go-clickhouse-batchinsert"
+	batchinsert "github.com/sberhome/go-clickhouse-batchinsert"
 	"github.com/stretchr/testify/require"
+
+	_ "github.com/ClickHouse/clickhouse-go"
 )
 
 type testingLogger struct {
 	tb testing.TB
 }
 
+const testHost = "127.0.0.1:9000"
+
 func (l testingLogger) Log(keyAndValues ...interface{}) {
 	l.tb.Log(keyAndValues...)
 }
 
+func GetUrl() string {
+	u := new(url.URL)
+	u.Scheme = "tcp"
+	u.Host = testHost
+
+	v := url.Values{}
+	v.Set("write_timeout", strconv.Itoa(1))
+	u.RawQuery = v.Encode()
+	return u.String()
+}
+
 func Test(t *testing.T) {
+
+	db, err := sql.Open("clickhouse", GetUrl())
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, db.Close())
+	}()
+
+	err = db.Ping()
+	require.NoError(t, err)
 	//
 	testTable := `
 			CREATE TABLE IF NOT EXISTS test (
@@ -30,17 +56,16 @@ func Test(t *testing.T) {
 	//
 	logger := &testingLogger{t}
 	b, err := batchinsert.New(
+		db,
 		testSql,
-		batchinsert.WithHost("127.0.0.1:9000"),
 		batchinsert.WithDebug(false),
 		batchinsert.WithLogger(logger),
-		batchinsert.WithWriteTimeOut(1),
 		batchinsert.WithFlushPeriod(time.Second),
 		batchinsert.WithMaxBatchSize(1000000),
 	)
 	require.NoError(t, err)
 	//
-	_, err = b.DB().Exec(testTable)
+	_, err = db.Exec(testTable)
 	require.NoError(t, err)
 	//
 	t.Log("NumCPU", runtime.NumCPU())
@@ -64,19 +89,14 @@ func Test(t *testing.T) {
 	}
 	//
 	time.Sleep(5 * time.Second)
-	require.NoError(t, b.Close())
+	b.Close()
+
 	require.Equal(t, 0, b.Len())
 	wg.Wait()
 	//
-	b, err = batchinsert.New(
-		testSql,
-		batchinsert.WithHost("127.0.0.1:9000"),
-	)
+	require.Equal(t, count, int64(selectCount(t, db, "test")))
+	_, err = db.Exec(`DROP TABLE IF EXISTS test`)
 	require.NoError(t, err)
-	require.Equal(t, count, int64(selectCount(t, b.DB(), "test")))
-	_, err = b.DB().Exec(`DROP TABLE IF EXISTS test`)
-	require.NoError(t, err)
-	require.NoError(t, b.Close())
 	//
 	t.Logf("insert count %d\n", count)
 }

@@ -1,8 +1,25 @@
 package batchinsert_test
 
-import batchinsert "github.com/MaruHyl/go-clickhouse-batchinsert"
+import (
+	"database/sql"
+	batchinsert "github.com/sberhome/go-clickhouse-batchinsert"
+
+	_ "github.com/ClickHouse/clickhouse-go"
+)
 
 func ExampleBatchInsert() {
+	// connect to DB
+	db, err := sql.Open("clickhouse", "127.0.0.1:9000")
+	if err != nil {
+		return
+	}
+	defer db.Close()
+
+	err = db.Ping()
+	if err != nil {
+		_ = db.Close()
+		return
+	}
 	//
 	createTable := `
 			CREATE TABLE IF NOT EXISTS test (
@@ -11,14 +28,14 @@ func ExampleBatchInsert() {
 	insertSql := "INSERT INTO test (x) values (?)"
 	//
 	b, err := batchinsert.New(
+		db,
 		insertSql,
-		batchinsert.WithHost("127.0.0.1:9000"),
 	)
 	if err != nil {
 		panic(err)
 	}
 	//
-	_, err = b.DB().Exec(createTable)
+	_, err = db.Exec(createTable)
 	if err != nil {
 		panic(err)
 	}
@@ -27,11 +44,11 @@ func ExampleBatchInsert() {
 	_ = b.Insert(2)
 	_ = b.Insert(3)
 	//
-	_, err = b.DB().Exec(`DROP TABLE IF EXISTS test`)
+	_, err = db.Exec(`DROP TABLE IF EXISTS test`)
 	if err != nil {
 		panic(err)
 	}
-	err = b.Close()
+	b.Close()
 	if err != nil {
 		panic(err)
 	}
