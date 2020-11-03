@@ -6,6 +6,8 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	"github.com/rs/zerolog/log"
 )
 
 var ErrClosed = errors.New("batch insert is closed")
@@ -14,15 +16,13 @@ type options struct {
 	// Enable debug output
 	debug bool
 	//
-	logger Logger
-	//
 	maxBatchSize int
 	//
 	flushPeriod time.Duration
 }
 
 var defaultOptions = options{
-	logger:       nopLogger{},
+	debug:        true,
 	maxBatchSize: 10000,
 	flushPeriod:  1 * time.Second,
 }
@@ -33,13 +33,6 @@ type Option func(opt *options)
 func WithDebug(debug bool) Option {
 	return func(opt *options) {
 		opt.debug = debug
-	}
-}
-
-// WithLogger set logger
-func WithLogger(logger Logger) Option {
-	return func(opt *options) {
-		opt.logger = logger
 	}
 }
 
@@ -148,14 +141,14 @@ func (b *BatchInsert) flusher() {
 		if l.Len() > 0 {
 			err := batchInsert(b.db, b.insertSql, l)
 			if err != nil {
-				b.opts.logger.Log("flush error", err)
+				log.Error().Err(err).Msg("flush failed")
 			} else {
-				b.opts.logger.Log("flushed", l.Len(), "cost", time.Since(startTime))
+				log.Debug().Msgf("flushed %d cost %s", l.Len(), time.Since(startTime))
 			}
 		}
 		if exited {
 			close(b.kick)
-			b.opts.logger.Log("flusher", "stop")
+			log.Info().Msg("flusher stop")
 			return
 		}
 	}

@@ -16,15 +16,7 @@ import (
 	_ "github.com/ClickHouse/clickhouse-go"
 )
 
-type testingLogger struct {
-	tb testing.TB
-}
-
 const testHost = "127.0.0.1:9000"
-
-func (l testingLogger) Log(keyAndValues ...interface{}) {
-	l.tb.Log(keyAndValues...)
-}
 
 func GetUrl() string {
 	u := new(url.URL)
@@ -54,12 +46,10 @@ func Test(t *testing.T) {
 			) engine=Memory`
 	testSql := "INSERT INTO test (x) values (?)"
 	//
-	logger := &testingLogger{t}
 	b, err := batchinsert.New(
 		db,
 		testSql,
 		batchinsert.WithDebug(false),
-		batchinsert.WithLogger(logger),
 		batchinsert.WithFlushPeriod(time.Second),
 		batchinsert.WithMaxBatchSize(1000000),
 	)
